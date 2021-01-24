@@ -1,6 +1,7 @@
 package org.interra.parser.emails;
 
 import org.interra.parser.interfaces.InputScanner;
+import org.interra.parser.interfaces.LineValidator;
 
 import java.io.InputStream;
 import java.util.HashMap;
@@ -10,34 +11,47 @@ import java.util.Scanner;
  *
  */
 public class UserEmailScanner implements InputScanner {
-    private HashMap<String, MutableUserName> mailUserSaver = new HashMap<>();
-    private HashMap<String, StringBuilder> userMailsResult;
-    Validator validator = new Validator();
+    private final HashMap<String, MutableUserName> mailUserSaver = new HashMap<>();
+    private final HashMap<String, StringBuilder> userMailsResult;
+    private final LineValidatorUserWithEmails validator = new LineValidatorUserWithEmails();
 
     public UserEmailScanner(HashMap<String, StringBuilder> userMailsResult) {
         this.userMailsResult = userMailsResult;
     }
 
+    /**
+     * @param is            входной поток, будет читаться построчно (строки разделяются символом \n)
+     * @param lineValidator проверяет соответсвие считанной линии заданному формату
+     * @return true если удалось успешно считать данные, они прошли валидацию и были разложены в результирующую структуру
+     * <p> false во всех других случаях
+     */
+    //TODO заменить boolean на коды ошибок через enum
     @Override
-    public void scanInput(InputStream is) {
+    public boolean blockedInputScan(InputStream is, LineValidator lineValidator) {
         Scanner input = new Scanner(is);
-        boolean parsing = true;
-        while (parsing) {
+        while (true) {
             String str = input.nextLine();
             if (str.equals("")) {
-                parsing = false;
-                continue;
+                return true;
+            }
+            if (!lineValidator.validateLine(str)) {
+                return false;
             }
             parseOneLine(str);
         }
     }
 
-    void parseOneLine(String all) { //линейная сложность получившегося алгоритма
+    /**
+     * @param all должна приходить только строка, соответствующая требуемому формату (смотри {@link LineValidatorUserWithEmails})
+     */
+    private void parseOneLine(String all) {
+        //линейная сложность получившегося алгоритма
+        //не делаем all.split в массив для экономии памяти и времени, парсим посимвольно
         StringBuilder mailStrToAdd = new StringBuilder();
         int parsingIndex = all.indexOf(" -> ");
         String mail;
         String user = all.substring(0, parsingIndex);
-        MutableUserName mutableUserName = new MutableUserName();
+        MutableUserName mutableUserName = new MutableUserName(); // описание в javadoc
         mutableUserName.userName = user;
         int emailsStartIndex = parsingIndex + 2;
         parsingIndex = emailsStartIndex;
@@ -63,8 +77,14 @@ public class UserEmailScanner implements InputScanner {
         userMailsResult.putIfAbsent(mutableUserName.userName, new StringBuilder(mailStr));
     }
 
+    /**
+     * Класс wrapper над именем пользователя,
+     * нужен, чтобы подменить имя пользователя за один шаг в произвольном количестве уже лежащих в памяти ссылок на MutableUserName
+     * Пример :
+     * foo@gmail.com -> MutableUserName -> user2
+     * ups@pisem.net -> MutableUserName -> user2
+     */
     class MutableUserName {
-        public String userName;
+        private String userName;
     }
-
 }
